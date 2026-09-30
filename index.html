@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="theme-color" content="#2f6f68">
+  <title>はごろも苑 面会スケジュール</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <main class="auth-view" id="auth-view">
+    <section class="auth-card" aria-labelledby="auth-title">
+      <div class="auth-brand">
+        <p class="auth-brand__label">はごろも苑</p>
+        <h1 id="auth-title">面会スケジュール</h1>
+        <p>職員を選択し、4桁のパスワードを入力してください。</p>
+      </div>
+
+      <div class="auth-loading" id="auth-loading" role="status">認証情報を確認しています…</div>
+
+      <form class="auth-form" id="login-form" novalidate hidden>
+        <h2>面会スケジュール ログイン</h2>
+        <div class="auth-field">
+          <label for="login-staff">職員名</label>
+          <select id="login-staff" required>
+            <option value="">職員を選択してください</option>
+          </select>
+        </div>
+        <div class="auth-field">
+          <label for="login-pin">4桁パスワード</label>
+          <input id="login-pin" type="password" inputmode="numeric" pattern="[0-9]{4}" maxlength="4" autocomplete="current-password" required>
+        </div>
+        <button class="primary-button auth-submit" id="login-button" type="submit">ログイン</button>
+      </form>
+
+      <form class="auth-form" id="initial-admin-form" novalidate hidden>
+        <div>
+          <p class="auth-form__label">初回設定</p>
+          <h2>初期管理者登録</h2>
+          <p class="auth-form__description">最初に、このアプリを管理する職員を登録します。</p>
+        </div>
+        <div class="auth-field">
+          <label for="initial-admin-name">職員名</label>
+          <input id="initial-admin-name" type="text" autocomplete="name" required>
+        </div>
+        <div class="auth-field">
+          <label for="initial-admin-pin">4桁パスワード</label>
+          <input id="initial-admin-pin" type="password" inputmode="numeric" pattern="[0-9]{4}" maxlength="4" autocomplete="new-password" required>
+        </div>
+        <div class="auth-field">
+          <label for="initial-admin-pin-confirm">パスワード確認</label>
+          <input id="initial-admin-pin-confirm" type="password" inputmode="numeric" pattern="[0-9]{4}" maxlength="4" autocomplete="new-password" required>
+        </div>
+        <button class="primary-button auth-submit" id="initial-admin-button" type="submit">管理者を登録</button>
+      </form>
+
+      <p class="auth-message" id="auth-message" role="alert" hidden></p>
+    </section>
+  </main>
+
+  <header class="app-header" id="app-header" hidden>
+    <div class="app-header__inner">
+      <div>
+        <p class="app-header__label">面会管理</p>
+        <h1>はごろも苑 面会スケジュール</h1>
+      </div>
+      <div class="session-controls">
+        <span>ログイン中：<strong id="logged-in-name"></strong></span>
+        <button class="header-action-button" id="open-staff-management" type="button" hidden>設定</button>
+        <button class="logout-button" id="logout-button" type="button">ログアウト</button>
+      </div>
+    </div>
+  </header>
+
+  <main class="app-main" id="main-view" hidden>
+    <section class="card today-card" aria-labelledby="today-heading">
+      <div class="section-heading">
+        <div>
+          <p class="date-label" id="today-date">2026年9月29日（火）</p>
+          <h2 id="today-heading">本日の面会予定</h2>
+        </div>
+        <span class="count-badge" id="today-count">0件</span>
+      </div>
+
+      <div class="schedule-list" id="today-schedule-list" aria-live="polite">
+        <div class="empty-state">
+          <span class="empty-state__icon" aria-hidden="true">✓</span>
+          <p>本日の面会予定はありません</p>
+        </div>
+      </div>
+
+      <button class="primary-button" id="open-registration" type="button">＋ 面会予定を登録</button>
+    </section>
+
+    <section class="card calendar-card" aria-labelledby="calendar-heading">
+      <div class="calendar-toolbar">
+        <button class="month-button" id="previous-month" type="button" aria-label="前月">‹ <span>前月</span></button>
+        <h2 id="calendar-heading">2026年9月</h2>
+        <button class="month-button" id="next-month" type="button" aria-label="次月"><span>次月</span> ›</button>
+      </div>
+
+      <div class="calendar" role="grid" aria-label="2026年9月のカレンダー">
+        <div class="weekday sunday" role="columnheader">日</div>
+        <div class="weekday" role="columnheader">月</div>
+        <div class="weekday" role="columnheader">火</div>
+        <div class="weekday" role="columnheader">水</div>
+        <div class="weekday" role="columnheader">木</div>
+        <div class="weekday" role="columnheader">金</div>
+        <div class="weekday saturday" role="columnheader">土</div>
+
+      </div>
+    </section>
+
+  </main>
+
+  <main class="app-main staff-management-view" id="staff-management-view" hidden>
+    <section class="card settings-header-card" aria-labelledby="staff-management-heading">
+      <div class="management-heading">
+        <div>
+          <p class="registration-heading__label">管理者メニュー</p>
+          <h2 id="staff-management-heading" tabindex="-1">設定</h2>
+        </div>
+        <button class="back-button management-back" id="back-from-staff-management" type="button">戻る</button>
+      </div>
+    </section>
+
+    <section class="settings-group" aria-labelledby="staff-section-heading">
+      <div class="card staff-list-card settings-section">
+        <div class="settings-section-heading">
+          <h2 id="staff-section-heading">職員管理</h2>
+          <p>職員の追加、パスワード変更、利用状態と管理者権限を管理します。</p>
+        </div>
+        <p class="management-message" id="management-message" role="status" aria-live="polite" hidden></p>
+        <div class="staff-list" id="staff-list" aria-live="polite"></div>
+      </div>
+
+      <div class="card staff-form-card" aria-labelledby="staff-add-heading">
+        <div class="staff-form-heading">
+          <h2 id="staff-add-heading">職員追加</h2>
+          <p>一般職員として追加します。管理者への変更は一覧から行えます。</p>
+        </div>
+        <form class="staff-form" id="staff-add-form" novalidate>
+          <div class="auth-field">
+            <label for="staff-add-name">職員名</label>
+            <input id="staff-add-name" type="text" autocomplete="name" required>
+          </div>
+          <div class="auth-field">
+            <label for="staff-add-pin">4桁パスワード</label>
+            <input id="staff-add-pin" type="password" inputmode="numeric" pattern="[0-9]{4}" maxlength="4" autocomplete="new-password" required>
+          </div>
+          <div class="auth-field">
+            <label for="staff-add-pin-confirm">パスワード確認</label>
+            <input id="staff-add-pin-confirm" type="password" inputmode="numeric" pattern="[0-9]{4}" maxlength="4" autocomplete="new-password" required>
+          </div>
+          <button class="primary-button staff-form-submit" id="staff-add-button" type="submit">職員を追加</button>
+        </form>
+      </div>
+
+      <div class="card staff-form-card" aria-labelledby="staff-pin-heading">
+        <div class="staff-form-heading">
+          <h2 id="staff-pin-heading">職員パスワード変更</h2>
+          <p>対象職員を選択して新しいパスワードを設定します。</p>
+        </div>
+        <form class="staff-form" id="staff-pin-form" novalidate>
+          <div class="auth-field">
+            <label for="staff-pin-target">対象職員</label>
+            <select id="staff-pin-target" required>
+              <option value="">職員を選択してください</option>
+            </select>
+          </div>
+          <div class="auth-field">
+            <label for="staff-new-pin">新しい4桁パスワード</label>
+            <input id="staff-new-pin" type="password" inputmode="numeric" pattern="[0-9]{4}" maxlength="4" autocomplete="new-password" required>
+          </div>
+          <div class="auth-field">
+            <label for="staff-new-pin-confirm">パスワード確認</label>
+            <input id="staff-new-pin-confirm" type="password" inputmode="numeric" pattern="[0-9]{4}" maxlength="4" autocomplete="new-password" required>
+          </div>
+          <button class="primary-button staff-form-submit" id="staff-pin-button" type="submit">パスワードを変更</button>
+        </form>
+      </div>
+    </section>
+
+    <section class="card data-card settings-section" aria-labelledby="data-heading">
+      <div>
+        <h2 id="data-heading">データ管理</h2>
+        <p>面会予定データの保存と読み込み</p>
+      </div>
+      <div class="data-actions">
+        <button class="secondary-button" id="export-json" type="button">JSON保存</button>
+        <button class="secondary-button" id="import-json" type="button" title="共有版では現在利用できません">JSON読込（利用不可）</button>
+        <input id="json-file-input" type="file" accept=".json,application/json" hidden>
+      </div>
+      <p class="data-message" id="data-message" role="status" aria-live="polite" hidden></p>
+    </section>
+  </main>
+
+  <main class="app-main registration-view" id="registration-view" hidden>
+    <section class="card registration-card" aria-labelledby="registration-heading">
+      <div class="registration-heading">
+        <p class="registration-heading__label" id="registration-mode-label">新規登録</p>
+        <h2 id="registration-heading" tabindex="-1">面会予定を登録</h2>
+        <p>面会日時と来苑される方の情報を入力してください。</p>
+      </div>
+
+      <form id="registration-form" novalidate>
+        <div class="form-error" id="form-error" role="alert" hidden></div>
+
+        <div class="form-grid">
+          <div class="form-field">
+            <label for="visit-date">日付 <span class="required-label">必須</span></label>
+            <input id="visit-date" name="visit-date" type="date" required>
+          </div>
+
+          <div class="form-field">
+            <label for="visit-time">来苑時間 <span class="required-label">必須</span></label>
+            <input id="visit-time" name="visit-time" type="time" required>
+          </div>
+
+          <div class="form-field form-field--wide">
+            <label for="resident-name">利用者名 <span class="required-label">必須</span></label>
+            <input id="resident-name" name="resident-name" type="text" autocomplete="off" required>
+          </div>
+
+          <div class="form-field form-field--wide">
+            <label for="visitor-name">面会者名 <span class="optional-label">任意</span></label>
+            <input id="visitor-name" name="visitor-name" type="text" autocomplete="off">
+          </div>
+
+          <div class="form-field form-field--wide">
+            <label for="notes">備考 <span class="optional-label">任意</span></label>
+            <textarea id="notes" name="notes" rows="4"></textarea>
+          </div>
+        </div>
+
+        <div class="form-actions">
+          <button class="back-button" id="back-to-main" type="button">戻る</button>
+          <button class="delete-button" id="delete-schedule" type="button" hidden>削除</button>
+          <button class="primary-button register-button" id="save-schedule" type="submit">登録する</button>
+        </div>
+      </form>
+    </section>
+  </main>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="app.js"></script>
+</body>
+</html>

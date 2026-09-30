@@ -1,0 +1,8 @@
+node_modules/
+.DS_Store
+supabase/.temp/
+supabase/migrations_visit_backup/
+
+.env
+.env.*
+!.env.example
