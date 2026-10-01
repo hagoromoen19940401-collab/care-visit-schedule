@@ -2,6 +2,32 @@ const STORAGE_KEY = "hagoromo_visit_schedules";
 const AUTH_SESSION_KEY = "hagoromo_visit_auth_session";
 const SUPABASE_URL = "https://xytxjujsydpvmrvnmcnj.supabase.co";
 const SUPABASE_PUBLISHABLE_KEY = "sb_publishable_EzqE7TE3zY_AuZJlZWEuKA_3fsXczmK";
+const SCHEDULE_TYPES = {
+  visit: {
+    label: "面会",
+    byDateRpc: "visit_schedules_by_date",
+    byMonthRpc: "visit_schedules_by_month",
+    addRpc: "visit_schedule_add",
+    updateRpc: "visit_schedule_update",
+    deleteRpc: "visit_schedule_delete",
+  },
+  outing: {
+    label: "外出",
+    byDateRpc: "outing_schedules_by_date",
+    byMonthRpc: "outing_schedules_by_month",
+    addRpc: "outing_schedule_add",
+    updateRpc: "outing_schedule_update",
+    deleteRpc: "outing_schedule_delete",
+  },
+  overnight: {
+    label: "外泊",
+    byDateRpc: "overnight_schedules_by_date",
+    byMonthRpc: "overnight_schedules_by_month",
+    addRpc: "overnight_schedule_add",
+    updateRpc: "overnight_schedule_update",
+    deleteRpc: "overnight_schedule_delete",
+  },
+};
 
 const authView = document.querySelector("#auth-view");
 const authLoading = document.querySelector("#auth-loading");
@@ -35,17 +61,27 @@ const staffNewPinInput = document.querySelector("#staff-new-pin");
 const staffNewPinConfirmInput = document.querySelector("#staff-new-pin-confirm");
 const staffPinButton = document.querySelector("#staff-pin-button");
 const mainView = document.querySelector("#main-view");
+const scheduleTypeButtons = [...document.querySelectorAll("[data-schedule-type]")];
 const registrationView = document.querySelector("#registration-view");
 const openRegistrationButton = document.querySelector("#open-registration");
 const backToMainButton = document.querySelector("#back-to-main");
 const registrationForm = document.querySelector("#registration-form");
 const visitDateInput = document.querySelector("#visit-date");
+const scheduleDateLabel = document.querySelector("#schedule-date-label");
 const visitTimeInput = document.querySelector("#visit-time");
+const visitTimeField = document.querySelector("#visit-time-field");
+const returnDateField = document.querySelector("#return-date-field");
+const returnDateInput = document.querySelector("#return-date");
 const residentNameInput = document.querySelector("#resident-name");
+const unitField = document.querySelector("#unit-field");
+const unitInputs = [...document.querySelectorAll('input[name="unit"]')];
 const visitorNameInput = document.querySelector("#visitor-name");
+const visitorNameField = document.querySelector("#visitor-name-field");
+const visitorNameLabel = document.querySelector("#visitor-name-label");
 const noteInput = document.querySelector("#notes");
 const formError = document.querySelector("#form-error");
 const registrationHeading = document.querySelector("#registration-heading");
+const registrationDescription = document.querySelector("#registration-description");
 const registrationModeLabel = document.querySelector("#registration-mode-label");
 const formActions = document.querySelector(".form-actions");
 const saveScheduleButton = document.querySelector("#save-schedule");
@@ -68,6 +104,7 @@ let calendarYear = initialCalendarDate.getFullYear();
 let calendarMonth = initialCalendarDate.getMonth();
 let calendarDays = [];
 let selectedDate = getTodayForDateInput();
+let currentScheduleType = "visit";
 let editingScheduleId = null;
 let supabaseClient = null;
 let currentAuthSession = null;
@@ -164,6 +201,7 @@ async function callVisitRpc(name, parameters = {}) {
 function showApplication(session) {
   currentAuthSession = session;
   currentUserIsAdmin = false;
+  currentScheduleType = "visit";
   openStaffManagementButton.hidden = true;
   loggedInName.textContent = session.display_name;
   authView.hidden = true;
@@ -174,6 +212,7 @@ function showApplication(session) {
   selectedDateSchedules = null;
   visibleMonthSchedules = [];
   visibleMonthSchedulesLoaded = false;
+  updateScheduleTypeUi();
   renderSelectedDateSchedules();
   renderCalendar();
   refreshScheduleData();
@@ -730,12 +769,39 @@ function isToday(dateValue) {
 }
 
 function formatScheduleHeading(dateValue) {
+  const typeLabel = SCHEDULE_TYPES[currentScheduleType].label;
   if (isToday(dateValue)) {
-    return "本日の面会予定";
+    return `本日の${typeLabel}予定`;
   }
 
   const [, month, day] = dateValue.split("-").map(Number);
-  return `${month}月${day}日の面会予定`;
+  return `${month}月${day}日の${typeLabel}予定`;
+}
+
+function updateScheduleTypeUi() {
+  const typeLabel = SCHEDULE_TYPES[currentScheduleType].label;
+  scheduleTypeButtons.forEach((button) => {
+    const isActive = button.dataset.scheduleType === currentScheduleType;
+    button.classList.toggle("is-active", isActive);
+    button.setAttribute("aria-pressed", String(isActive));
+  });
+  openRegistrationButton.textContent = `＋ ${typeLabel}予定を登録`;
+}
+
+function switchScheduleType(type) {
+  if (!SCHEDULE_TYPES[type] || type === currentScheduleType) {
+    return;
+  }
+
+  currentScheduleType = type;
+  editingScheduleId = null;
+  selectedDateSchedules = null;
+  visibleMonthSchedules = [];
+  visibleMonthSchedulesLoaded = false;
+  updateScheduleTypeUi();
+  renderSelectedDateSchedules();
+  renderCalendarScheduleCounts();
+  refreshScheduleData();
 }
 
 function showDataMessage(message, type) {
@@ -757,7 +823,18 @@ async function exportSchedulesAsJson() {
       throw new Error("取得データの形式が正しくありません。");
     }
 
-    const json = JSON.stringify(schedules, null, 2);
+    const backupSchedules = schedules.map((schedule) => ({
+      id: schedule.id,
+      visit_date: schedule.visit_date,
+      visit_time: schedule.visit_time,
+      resident_name: schedule.resident_name,
+      unit: schedule.unit ?? null,
+      visitor_name: schedule.visitor_name,
+      note: schedule.note,
+      created_at: schedule.created_at,
+      updated_at: schedule.updated_at,
+    }));
+    const json = JSON.stringify(backupSchedules, null, 2);
     const blob = new Blob(["\uFEFF", json], { type: "application/json;charset=utf-8" });
     const downloadUrl = URL.createObjectURL(blob);
     const downloadLink = document.createElement("a");
@@ -830,61 +907,84 @@ function visibleMonthStart() {
 
 async function fetchSelectedDateSchedules() {
   const requestedDate = selectedDate;
+  const requestedType = currentScheduleType;
+  const typeConfig = SCHEDULE_TYPES[requestedType];
   let session;
   selectedDateSchedules = null;
   renderSelectedDateSchedules();
 
   try {
     session = getScheduleSession();
-    const schedules = await callVisitRpc("visit_schedules_by_date", {
+    const dateParameter = requestedType === "visit"
+      ? { p_visit_date: requestedDate }
+      : requestedType === "outing"
+        ? { p_outing_date: requestedDate }
+        : { p_target_date: requestedDate };
+    const schedules = await callVisitRpc(typeConfig.byDateRpc, {
       p_token: session.token,
-      p_visit_date: requestedDate,
+      ...dateParameter,
     });
     if (!Array.isArray(schedules)) {
       throw new Error("取得データの形式が正しくありません。");
     }
-    if (selectedDate === requestedDate && currentAuthSession?.token === session.token) {
+    if (
+      selectedDate === requestedDate
+      && currentScheduleType === requestedType
+      && currentAuthSession?.token === session.token
+    ) {
       selectedDateSchedules = schedules;
       renderSelectedDateSchedules();
     }
     return true;
   } catch (error) {
-    if (selectedDate !== requestedDate && !isScheduleAuthenticationError(error)) {
+    if (
+      (selectedDate !== requestedDate || currentScheduleType !== requestedType)
+      && !isScheduleAuthenticationError(error)
+    ) {
       return false;
     }
     selectedDateSchedules = null;
-    await handleScheduleError(error, "面会予定を読み込めませんでした。", true);
+    await handleScheduleError(error, `${typeConfig.label}予定を読み込めませんでした。`, true);
     return false;
   }
 }
 
 async function fetchVisibleMonthSchedules() {
   const requestedMonth = visibleMonthStart();
+  const requestedType = currentScheduleType;
+  const typeConfig = SCHEDULE_TYPES[requestedType];
   let session;
 
   try {
     session = getScheduleSession();
-    const schedules = await callVisitRpc("visit_schedules_by_month", {
+    const schedules = await callVisitRpc(typeConfig.byMonthRpc, {
       p_token: session.token,
       p_month_start: requestedMonth,
     });
     if (!Array.isArray(schedules)) {
       throw new Error("取得データの形式が正しくありません。");
     }
-    if (visibleMonthStart() === requestedMonth && currentAuthSession?.token === session.token) {
+    if (
+      visibleMonthStart() === requestedMonth
+      && currentScheduleType === requestedType
+      && currentAuthSession?.token === session.token
+    ) {
       visibleMonthSchedules = schedules;
       visibleMonthSchedulesLoaded = true;
       renderCalendarScheduleCounts();
     }
     return true;
   } catch (error) {
-    if (visibleMonthStart() !== requestedMonth && !isScheduleAuthenticationError(error)) {
+    if (
+      (visibleMonthStart() !== requestedMonth || currentScheduleType !== requestedType)
+      && !isScheduleAuthenticationError(error)
+    ) {
       return false;
     }
     visibleMonthSchedules = [];
     visibleMonthSchedulesLoaded = false;
     renderCalendarScheduleCounts();
-    await handleScheduleError(error, "月間の面会予定を読み込めませんでした。");
+    await handleScheduleError(error, `月間の${typeConfig.label}予定を読み込めませんでした。`);
     return false;
   }
 }
@@ -896,7 +996,11 @@ async function refreshScheduleData() {
       fetchVisibleMonthSchedules(),
     ]);
   } catch (error) {
-    await handleScheduleError(error, "面会予定を読み込めませんでした。", true);
+    await handleScheduleError(
+      error,
+      `${SCHEDULE_TYPES[currentScheduleType].label}予定を読み込めませんでした。`,
+      true,
+    );
   }
 }
 
@@ -919,9 +1023,10 @@ function renderEmptySchedule(dateValue) {
   icon.textContent = "✓";
 
   const message = document.createElement("p");
+  const typeLabel = SCHEDULE_TYPES[currentScheduleType].label;
   message.textContent = isToday(dateValue)
-    ? "本日の面会予定はありません"
-    : "この日の面会予定はありません";
+    ? `本日の${typeLabel}予定はありません`
+    : `この日の${typeLabel}予定はありません`;
 
   emptyState.append(icon, message);
   todayScheduleList.append(emptyState);
@@ -931,13 +1036,7 @@ function renderScheduleItem(schedule) {
   const item = document.createElement("article");
   item.className = "schedule-item";
   item.setAttribute("role", "button");
-  item.setAttribute("aria-label", `${schedule.visit_time} ${schedule.resident_name}様の予定を編集`);
   item.tabIndex = 0;
-
-  const time = document.createElement("time");
-  time.className = "schedule-item__time";
-  time.dateTime = `${schedule.visit_date}T${schedule.visit_time}`;
-  time.textContent = schedule.visit_time.slice(0, 5);
 
   const content = document.createElement("div");
   const name = document.createElement("p");
@@ -946,8 +1045,28 @@ function renderScheduleItem(schedule) {
   content.append(name);
 
   const details = [];
-  if (schedule.visitor_name) {
-    details.push(`面会者：${schedule.visitor_name}`);
+  if (currentScheduleType === "visit") {
+    const unitLabels = { sakura: "さくら", keyaki: "けやき" };
+    if (unitLabels[schedule.unit]) {
+      const unit = document.createElement("p");
+      unit.className = "schedule-item__unit";
+      unit.textContent = unitLabels[schedule.unit];
+      content.append(unit);
+    }
+    if (schedule.visitor_name) {
+      details.push(`面会者：${schedule.visitor_name}`);
+    }
+  } else if (currentScheduleType === "outing") {
+    if (schedule.companion) {
+      details.push(`付き添い：${schedule.companion}`);
+    }
+  } else if (currentScheduleType === "overnight") {
+    const [, startMonth, startDay] = schedule.start_date.split("-").map(Number);
+    const [, returnMonth, returnDay] = schedule.return_date.split("-").map(Number);
+    details.push(`外泊期間：${startMonth}/${startDay}〜${returnMonth}/${returnDay}帰苑`);
+    if (schedule.destination) {
+      details.push(`外泊先：${schedule.destination}`);
+    }
   }
   if (schedule.note) {
     details.push(`備考：${schedule.note}`);
@@ -965,6 +1084,19 @@ function renderScheduleItem(schedule) {
   editHint.setAttribute("aria-hidden", "true");
   editHint.textContent = "編集 ›";
 
+  const itemParts = [];
+  if (currentScheduleType === "visit") {
+    const time = document.createElement("time");
+    time.className = "schedule-item__time";
+    time.dateTime = `${schedule.visit_date}T${schedule.visit_time}`;
+    time.textContent = schedule.visit_time.slice(0, 5);
+    item.setAttribute("aria-label", `${schedule.visit_time} ${schedule.resident_name}様の予定を編集`);
+    itemParts.push(time);
+  } else {
+    item.classList.add("schedule-item--without-time");
+    item.setAttribute("aria-label", `${schedule.resident_name}様の${SCHEDULE_TYPES[currentScheduleType].label}予定を編集`);
+  }
+
   item.addEventListener("click", () => showEditView(schedule));
   item.addEventListener("keydown", (event) => {
     if (event.key === "Enter" || event.key === " ") {
@@ -973,7 +1105,7 @@ function renderScheduleItem(schedule) {
     }
   });
 
-  item.append(time, content, editHint);
+  item.append(...itemParts, content, editHint);
   todayScheduleList.append(item);
 }
 
@@ -982,15 +1114,23 @@ function renderSelectedDateSchedules() {
   scheduleHeading.textContent = formatScheduleHeading(selectedDate);
 
   if (selectedDateSchedules === null) {
-    todayCount.textContent = "—件";
-    renderScheduleStatus("面会予定を読み込んでいます…");
+    todayCount.textContent = `—${currentScheduleType === "overnight" ? "人" : "件"}`;
+    renderScheduleStatus(`${SCHEDULE_TYPES[currentScheduleType].label}予定を読み込んでいます…`);
     return;
   }
 
-  const schedules = [...selectedDateSchedules]
-    .sort((first, second) => first.visit_time.localeCompare(second.visit_time));
+  const schedules = [...selectedDateSchedules].sort((first, second) => {
+    if (currentScheduleType === "visit") {
+      return first.visit_time.localeCompare(second.visit_time);
+    }
+    if (currentScheduleType === "outing") {
+      return first.resident_name.localeCompare(second.resident_name, "ja");
+    }
+    return first.start_date.localeCompare(second.start_date)
+      || first.resident_name.localeCompare(second.resident_name, "ja");
+  });
 
-  todayCount.textContent = `${schedules.length}件`;
+  todayCount.textContent = `${schedules.length}${currentScheduleType === "overnight" ? "人" : "件"}`;
   todayScheduleList.replaceChildren();
   todayScheduleList.classList.toggle("schedule-list--populated", schedules.length > 0);
 
@@ -1094,16 +1234,18 @@ function changeCalendarMonth(offset) {
 }
 
 function renderCalendarScheduleCounts() {
-  const countByDate = visibleMonthSchedules.reduce((counts, schedule) => {
-    if (schedule.visit_date) {
-      counts[schedule.visit_date] = (counts[schedule.visit_date] || 0) + 1;
-    }
-    return counts;
-  }, {});
-
   calendarDays.forEach((day) => {
     day.querySelector(".calendar-day__count")?.remove();
-    const count = countByDate[day.dataset.date] || 0;
+    const dateValue = day.dataset.date;
+    const count = visibleMonthSchedules.filter((schedule) => {
+      if (currentScheduleType === "visit") {
+        return schedule.visit_date === dateValue;
+      }
+      if (currentScheduleType === "outing") {
+        return schedule.outing_date === dateValue;
+      }
+      return schedule.start_date <= dateValue && dateValue < schedule.return_date;
+    }).length;
 
     if (count === 0) {
       return;
@@ -1111,7 +1253,7 @@ function renderCalendarScheduleCounts() {
 
     const countLabel = document.createElement("small");
     countLabel.className = "calendar-day__count";
-    countLabel.textContent = `${count}件`;
+    countLabel.textContent = `${count}${currentScheduleType === "overnight" ? "人" : "件"}`;
     day.append(countLabel);
   });
 }
@@ -1119,39 +1261,102 @@ function renderCalendarScheduleCounts() {
 function clearValidationErrors() {
   formError.hidden = true;
   formError.textContent = "";
-  [visitDateInput, visitTimeInput, residentNameInput].forEach((input) => {
+  [visitDateInput, visitTimeInput, returnDateInput, residentNameInput].forEach((input) => {
     input.removeAttribute("aria-invalid");
   });
+  unitField.removeAttribute("aria-invalid");
+}
+
+function getSelectedUnit() {
+  return unitInputs.find((input) => input.checked)?.value || "";
+}
+
+function setSelectedUnit(unit) {
+  unitInputs.forEach((input) => {
+    input.checked = input.value === unit;
+  });
+}
+
+function configureRegistrationFields() {
+  const isVisit = currentScheduleType === "visit";
+  const isOvernight = currentScheduleType === "overnight";
+
+  scheduleDateLabel.textContent = isOvernight ? "外泊開始日" : "日付";
+  visitTimeField.hidden = !isVisit;
+  visitTimeInput.required = isVisit;
+  unitField.hidden = !isVisit;
+  unitInputs.forEach((input) => {
+    input.required = isVisit;
+  });
+  visitorNameField.hidden = false;
+  visitorNameLabel.textContent = isVisit ? "面会者名" : isOvernight ? "外泊先" : "付き添い";
+  returnDateField.hidden = !isOvernight;
+  returnDateInput.required = isOvernight;
+
+  if (isVisit) {
+    registrationDescription.textContent = "面会日時と来苑される方の情報を入力してください。";
+  } else if (isOvernight) {
+    registrationDescription.textContent = "外泊開始日、帰苑日と利用者の情報を入力してください。帰苑日は外泊日に含みません。";
+  } else {
+    registrationDescription.textContent = "外出日と利用者の情報を入力してください。";
+  }
 }
 
 function validateRegistrationForm() {
   const requiredFields = [
-    { input: visitDateInput, label: "日付" },
-    { input: visitTimeInput, label: "来苑時間" },
+    { input: visitDateInput, label: currentScheduleType === "overnight" ? "外泊開始日" : "日付" },
     { input: residentNameInput, label: "利用者名" },
   ];
+  if (currentScheduleType === "visit") {
+    requiredFields.splice(1, 0, { input: visitTimeInput, label: "来苑時間" });
+  }
+  if (currentScheduleType === "overnight") {
+    requiredFields.splice(1, 0, { input: returnDateInput, label: "帰苑日" });
+  }
   const missingFields = requiredFields.filter(({ input }) => !input.value.trim());
+  const unitMissing = currentScheduleType === "visit" && !getSelectedUnit();
 
   clearValidationErrors();
 
-  if (missingFields.length === 0) {
+  const invalidOvernightRange = currentScheduleType === "overnight"
+    && visitDateInput.value
+    && returnDateInput.value
+    && returnDateInput.value <= visitDateInput.value;
+
+  if (missingFields.length === 0 && !unitMissing && !invalidOvernightRange) {
     return true;
   }
 
   missingFields.forEach(({ input }) => input.setAttribute("aria-invalid", "true"));
-  formError.textContent = `${missingFields.map(({ label }) => label).join("、")}を入力してください。`;
+  if (unitMissing) {
+    unitField.setAttribute("aria-invalid", "true");
+  }
+  const messages = [];
+  if (missingFields.length > 0) {
+    messages.push(`${missingFields.map(({ label }) => label).join("、")}を入力してください。`);
+  }
+  if (unitMissing) {
+    messages.push("ユニットを選択してください。");
+  }
+  if (invalidOvernightRange) {
+    returnDateInput.setAttribute("aria-invalid", "true");
+    messages.push("帰苑日は外泊開始日より後の日付を指定してください。");
+  }
+  formError.textContent = messages.join(" ");
   formError.hidden = false;
-  missingFields[0].input.focus();
+  (missingFields[0]?.input || (unitMissing ? unitInputs[0] : returnDateInput)).focus();
   return false;
 }
 
 function showRegistrationView() {
+  const typeLabel = SCHEDULE_TYPES[currentScheduleType].label;
   editingScheduleId = null;
   registrationForm.reset();
   clearValidationErrors();
+  configureRegistrationFields();
   visitDateInput.value = getTodayForDateInput();
   registrationModeLabel.textContent = "新規登録";
-  registrationHeading.textContent = "面会予定を登録";
+  registrationHeading.textContent = `${typeLabel}予定を登録`;
   saveScheduleButton.textContent = "登録する";
   deleteScheduleButton.hidden = true;
   formActions.classList.remove("editing");
@@ -1162,16 +1367,28 @@ function showRegistrationView() {
 }
 
 function showEditView(schedule) {
+  const typeLabel = SCHEDULE_TYPES[currentScheduleType].label;
   editingScheduleId = schedule.id;
   registrationForm.reset();
   clearValidationErrors();
-  visitDateInput.value = schedule.visit_date;
-  visitTimeInput.value = schedule.visit_time.slice(0, 5);
+  configureRegistrationFields();
+  visitDateInput.value = currentScheduleType === "visit"
+    ? schedule.visit_date
+    : currentScheduleType === "outing"
+      ? schedule.outing_date
+      : schedule.start_date;
+  returnDateInput.value = currentScheduleType === "overnight" ? schedule.return_date : "";
+  visitTimeInput.value = currentScheduleType === "visit" ? schedule.visit_time.slice(0, 5) : "";
   residentNameInput.value = schedule.resident_name;
-  visitorNameInput.value = schedule.visitor_name || "";
+  setSelectedUnit(currentScheduleType === "visit" ? schedule.unit : "");
+  visitorNameInput.value = currentScheduleType === "visit"
+    ? schedule.visitor_name || ""
+    : currentScheduleType === "outing"
+      ? schedule.companion || ""
+      : schedule.destination || "";
   noteInput.value = schedule.note || "";
   registrationModeLabel.textContent = "予定編集";
-  registrationHeading.textContent = "面会予定を編集";
+  registrationHeading.textContent = `${typeLabel}予定を編集`;
   saveScheduleButton.textContent = "変更を保存";
   deleteScheduleButton.hidden = false;
   formActions.classList.add("editing");
@@ -1202,16 +1419,29 @@ async function registerSchedule(event) {
   }
 
   const isEditing = Boolean(editingScheduleId);
-  const rpcName = isEditing ? "visit_schedule_update" : "visit_schedule_add";
+  const typeConfig = SCHEDULE_TYPES[currentScheduleType];
+  const rpcName = isEditing ? typeConfig.updateRpc : typeConfig.addRpc;
   const normalLabel = isEditing ? "変更を保存" : "登録する";
   const parameters = {
     p_token: "",
-    p_visit_date: visitDateInput.value,
-    p_visit_time: visitTimeInput.value,
     p_resident_name: residentNameInput.value.trim(),
-    p_visitor_name: visitorNameInput.value.trim() || null,
     p_note: noteInput.value.trim() || null,
   };
+  if (currentScheduleType === "visit") {
+    Object.assign(parameters, {
+      p_visit_date: visitDateInput.value,
+      p_visit_time: visitTimeInput.value,
+      p_unit: getSelectedUnit(),
+      p_visitor_name: visitorNameInput.value.trim() || null,
+    });
+  } else if (currentScheduleType === "outing") {
+    parameters.p_outing_date = visitDateInput.value;
+    parameters.p_companion = visitorNameInput.value.trim() || null;
+  } else {
+    parameters.p_start_date = visitDateInput.value;
+    parameters.p_return_date = returnDateInput.value;
+    parameters.p_destination = visitorNameInput.value.trim() || null;
+  }
   if (isEditing) {
     parameters.p_id = editingScheduleId;
   }
@@ -1225,10 +1455,10 @@ async function registerSchedule(event) {
     await refreshScheduleData();
   } catch (error) {
     if (isScheduleAuthenticationError(error)) {
-      await handleScheduleError(error, "面会予定を保存できませんでした。");
+      await handleScheduleError(error, `${typeConfig.label}予定を保存できませんでした。`);
       return;
     }
-    formError.textContent = `面会予定を保存できませんでした。${error?.message ? ` ${error.message}` : ""}`;
+    formError.textContent = `${typeConfig.label}予定を保存できませんでした。${error?.message ? ` ${error.message}` : ""}`;
     formError.hidden = false;
   } finally {
     saveScheduleButton.disabled = false;
@@ -1237,28 +1467,29 @@ async function registerSchedule(event) {
 }
 
 async function deleteEditingSchedule() {
-  if (!editingScheduleId || !window.confirm("この面会予定を削除しますか？")) {
+  const typeConfig = SCHEDULE_TYPES[currentScheduleType];
+  if (!editingScheduleId || !window.confirm(`この${typeConfig.label}予定を削除しますか？`)) {
     return;
   }
 
   deleteScheduleButton.disabled = true;
   deleteScheduleButton.textContent = "削除中…";
   try {
-    const deleted = await callVisitRpc("visit_schedule_delete", {
+    const deleted = await callVisitRpc(typeConfig.deleteRpc, {
       p_token: getScheduleSession().token,
       p_id: editingScheduleId,
     });
     if (deleted !== true) {
-      throw new Error("削除する面会予定が見つかりませんでした。");
+      throw new Error(`削除する${typeConfig.label}予定が見つかりませんでした。`);
     }
     showMainView();
     await refreshScheduleData();
   } catch (error) {
     if (isScheduleAuthenticationError(error)) {
-      await handleScheduleError(error, "面会予定を削除できませんでした。");
+      await handleScheduleError(error, `${typeConfig.label}予定を削除できませんでした。`);
       return;
     }
-    formError.textContent = `面会予定を削除できませんでした。${error?.message ? ` ${error.message}` : ""}`;
+    formError.textContent = `${typeConfig.label}予定を削除できませんでした。${error?.message ? ` ${error.message}` : ""}`;
     formError.hidden = false;
   } finally {
     deleteScheduleButton.disabled = false;
@@ -1267,6 +1498,9 @@ async function deleteEditingSchedule() {
 }
 
 openRegistrationButton.addEventListener("click", showRegistrationView);
+scheduleTypeButtons.forEach((button) => {
+  button.addEventListener("click", () => switchScheduleType(button.dataset.scheduleType));
+});
 backToMainButton.addEventListener("click", showMainView);
 registrationForm.addEventListener("submit", registerSchedule);
 registrationForm.addEventListener("input", clearValidationErrors);
