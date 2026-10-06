@@ -73,17 +73,11 @@
   </header>
 
   <main class="app-main" id="main-view" hidden>
-    <nav class="schedule-type-switcher" aria-label="予定の種類">
-      <button class="schedule-type-button is-active" type="button" data-schedule-type="visit" aria-pressed="true">面会</button>
-      <button class="schedule-type-button" type="button" data-schedule-type="outing" aria-pressed="false">外出</button>
-      <button class="schedule-type-button" type="button" data-schedule-type="overnight" aria-pressed="false">外泊</button>
-    </nav>
-
     <section class="card today-card" aria-labelledby="today-heading">
       <div class="section-heading">
         <div>
           <p class="date-label" id="today-date">2026年9月29日（火）</p>
-          <h2 id="today-heading">本日の面会予定</h2>
+          <h2 id="today-heading">本日の予定</h2>
         </div>
         <span class="count-badge" id="today-count">0件</span>
       </div>
@@ -91,11 +85,14 @@
       <div class="schedule-list" id="today-schedule-list" aria-live="polite">
         <div class="empty-state">
           <span class="empty-state__icon" aria-hidden="true">✓</span>
-          <p>本日の面会予定はありません</p>
+          <p>本日の予定はありません</p>
         </div>
       </div>
 
-      <button class="primary-button" id="open-registration" type="button">＋ 面会予定を登録</button>
+      <div class="schedule-navigation">
+        <button class="primary-button" id="open-registration" type="button">＋ 予定を登録</button>
+        <button class="secondary-button" id="open-schedule-management" type="button">予定を管理</button>
+      </div>
     </section>
 
     <section class="card calendar-card" aria-labelledby="calendar-heading">
@@ -117,6 +114,21 @@
       </div>
     </section>
 
+  </main>
+
+  <main class="app-main" id="schedule-management-view" hidden>
+    <section class="card" aria-labelledby="schedule-management-heading">
+      <div class="management-heading">
+        <h2 id="schedule-management-heading" tabindex="-1">予定を管理</h2>
+        <button class="back-button management-back" id="back-from-schedule-management" type="button">戻る</button>
+      </div>
+      <div class="auth-field">
+        <label for="schedule-management-date">確認する日付</label>
+        <input id="schedule-management-date" type="date" required>
+      </div>
+      <p>予定を選択すると、編集・削除できます。</p>
+      <div class="schedule-list" id="managed-schedule-list" aria-live="polite"></div>
+    </section>
   </main>
 
   <main class="app-main staff-management-view" id="staff-management-view" hidden>
@@ -208,6 +220,12 @@
         <h2 id="registration-heading" tabindex="-1">面会予定を登録</h2>
         <p id="registration-description">面会日時と来苑される方の情報を入力してください。</p>
       </div>
+
+      <nav class="registration-type-switcher" aria-label="登録する予定の種類">
+        <button class="schedule-type-button is-active" type="button" data-registration-type="visit" aria-pressed="true">面会</button>
+        <button class="schedule-type-button" type="button" data-registration-type="outing" aria-pressed="false">外出</button>
+        <button class="schedule-type-button" type="button" data-registration-type="overnight" aria-pressed="false">外泊</button>
+      </nav>
 
       <form id="registration-form" novalidate>
         <div class="form-error" id="form-error" role="alert" hidden></div>
